@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { GIFEncoder, quantize, applyPalette } from "gifenc";
 
 const ease = (x) => 1 - Math.pow(1 - x, 3);
@@ -7,15 +8,38 @@ const smooth = (x) => x * x * (3 - 2 * x);
 /* reveal "build": pieces drop in one by one in the order they were placed.
    reveal "finished": the whole model is shown from the start.
    camera "orbit": one full turn around the model from the current view.
-   camera "angles": fly smoothly through the saved shots, in order. */
-export function planAnimation(count, reveal, camera = "orbit", shots = []) {
+   camera "angles": fly smoothly through the saved orbit shots, in order.
+   camera "tour": a first-person home tour that glides through saved walk stops. */
+const forward = (yaw, pitch) =>
+  new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+
+function makeTour(stops) {
+  const pos = stops.map((s) => new THREE.Vector3(s.x, s.y, s.z));
+  const look = stops.map((s, i) => pos[i].clone().addScaledVector(forward(s.yaw, s.pitch), 5));
+  if (stops.length === 1) return { single: { pos: pos[0], look: look[0] } };
+  // "catmullrom" (not centripetal) so two stops at the same spot don't break the curve
+  const curve = (pts) => new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5);
+  return { pos: curve(pos), look: curve(look) };
+}
+
+export function planAnimation(count, reveal, camera = "orbit", shots = [], tour = { stops: [], secs: 3 }) {
   const build = reveal === "build";
   const buildTime = build ? Math.min(8, Math.max(2.5, count * 0.12)) : 0;
   const drop = 0.4;
   const useShots = camera === "angles" && shots.length > 0;
-  const camTotal = useShots ? (shots.length > 1 ? ((shots.length - 1) * 2.5) / 0.9 : 4) : 6;
+  const useTour = camera === "tour" && tour.stops.length > 0;
+  const camTotal = useTour
+    ? tour.stops.length > 1 ? (tour.stops.length - 1) * tour.secs + 1 : 4
+    : useShots
+      ? shots.length > 1 ? ((shots.length - 1) * 2.5) / 0.9 : 4
+      : 6;
   const total = build ? Math.max(camTotal, buildTime + drop + 2.5) : camTotal;
-  return { count, reveal, buildTime, drop, total, shots: useShots ? shots : null };
+  return {
+    count, reveal, buildTime, drop, total,
+    shots: useShots ? shots : null,
+    tour: useTour ? makeTour(tour.stops) : null,
+    fov: useTour ? 65 : 45, // interiors need a wider lens
+  };
 }
 
 /* Camera pose at progress u (0..1). Shots are blended with a smooth ease, taking the
@@ -49,8 +73,25 @@ export function poseScene(env, plan, t, order) {
     g.visible = local > 0;
     g.position.y = g.userData.baseY + (1 - ease(Math.min(1, Math.max(0, local)))) * 8;
   });
-  Object.assign(orbit, cameraAt(plan, env, t / plan.total));
-  updateCamera();
+  if (camera.fov !== plan.fov) {
+    camera.fov = plan.fov;
+    camera.updateProjectionMatrix();
+  }
+  if (plan.tour) {
+    const tr = plan.tour;
+    let p, l;
+    if (tr.single) ({ pos: p, look: l } = tr.single);
+    else {
+      const u = Math.min(1, Math.max(0, (t - 0.5) / (plan.total - 1))); // short hold at both ends
+      p = tr.pos.getPoint(u);
+      l = tr.look.getPoint(u);
+    }
+    camera.position.copy(p);
+    camera.lookAt(l);
+  } else {
+    Object.assign(orbit, cameraAt(plan, env, t / plan.total));
+    updateCamera();
+  }
   renderer.render(scene, camera);
 }
 

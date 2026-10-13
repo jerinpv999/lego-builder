@@ -8,10 +8,13 @@ A 3D brick builder that runs in the browser, made with React and Three.js. Place
 - **Around 120 pieces** in 15 groups: bricks, flat bricks and tiles, windows and doors, roofs, logs, trees, plants and stones, people, vehicles, two-wheelers, railway, water and boats, furniture, home appliances and kitchen utensils.
 - **Stacking.** Pieces stack on top of each other and drop down if what is under them is removed. Pieces that can't be built on (a roof, a tree, a car) show a red preview.
 - **Rotation** in 90° steps.
+- **Keyboard shortcuts** for every action, with a built-in list (press **?**).
+- **Undo and redo** for placing, removing, clearing, loading and resizing.
 - **Colors.** Eight colors for bricks, upholstery, hulls, frames and similar parts.
 - **Resizable baseplate** from 8×8 to 64×64 studs.
 - **Autosave** in the browser, plus **Save JSON / Load JSON** for files.
-- **Animation export** as a GIF or video, with build-up or finished-model reveal and either an orbit or your own saved camera angles.
+- **Walk mode and home tours.** Walk through your build in first person, save a stop in each room, and export a walkthrough video.
+- **Animation export** as a GIF or video, with build-up or finished-model reveal and an orbit, your own saved camera angles, or a home tour.
 
 ## Requirements
 
@@ -82,10 +85,44 @@ On Node 20.19 or newer you can use `npm create vite@latest` instead.
 | Zoom | Scroll |
 | Rotate the selected piece | **R** or the Rotate button |
 | Remove a piece | Switch to **Remove** mode and click it. Anything above it drops down |
-| Undo or clear | Undo removes the last piece placed. Clear removes everything |
+| Undo or redo | **Undo** and **Redo** step back and forward through every change, up to 100 steps |
+| Clear | Removes everything (asks first). You can undo it |
+| Walk through the build | Press **Walk**. Use **W A S D** to move, **Q / E** to go down or up, **← →** to turn, drag to look, scroll to step forward or back, and hold **Shift** to move faster. Placing pieces is switched off while you walk; press Walk again to return to the orbit view |
 | Resize the baseplate | **Expand** or **Shrink** (4 studs per side per click). Existing pieces stay centered, and Shrink is disabled if it would cut off a piece |
 
 Pieces face the front by default (the drawers, doors and seat opening toward the front of the baseplate). Use R to turn them.
+
+## Keyboard shortcuts
+
+Press **?** or **H** (or the **Keys** button) to see this list in the app. On a Mac, use ⌘ instead of Ctrl. Shortcuts are paused while you type in the search box, and while a video or GIF export is running only **Esc** and the help window work.
+
+| Area | Keys | Action |
+|---|---|---|
+| Build and edit | **B** / **X** | Build mode / Remove mode |
+| | **Space** or **Enter** | Place or remove at the cursor (with the pointer over the 3D view) |
+| | **R** / **Shift+R** | Rotate the piece / rotate the other way |
+| | **Ctrl+Z** | Undo |
+| | **Ctrl+Y** or **Ctrl+Shift+Z** | Redo |
+| | **Shift+Delete** | Clear everything (asks first) |
+| | **Esc** | Close help, cancel an export, close the Animate panel, leave walk mode, then return to build mode |
+| Pieces and colors | **[** and **]** | Previous / next category |
+| | **,** and **.** | Previous / next piece |
+| | **C** / **Shift+C** | Next / previous color |
+| | **/** or **Ctrl+K** | Search pieces |
+| Camera | **1 2 3 4** | Front, Side, Top, Iso view |
+| | **0** | Reset the view |
+| | **Arrow keys** | Rotate and tilt (hold **Shift** for bigger steps) |
+| | **Z** / **Shift+Z** | Zoom in / out |
+| | **F** | Walk mode on / off |
+| | **W A S D**, **Q / E**, **← →**, **Shift** | Walk, down / up, turn, faster (walk mode only) |
+| Baseplate and files | **+** or **=** / **-** or **_** | Expand / shrink the baseplate |
+| | **Ctrl+S** / **Ctrl+O** | Save JSON / Load JSON |
+| Animation | **M** | Open / close the Animate panel |
+| | **U** | Pieces: build-up / finished |
+| | **O** | Camera: Orbit, Angles, Home tour |
+| | **K** | Save the current camera angle or home tour stop |
+| | **P** / **G** / **V** | Preview / export GIF / export video |
+| Help | **?** or **H** | Show the shortcut list |
 
 ## Saving and loading
 
@@ -111,7 +148,7 @@ Your build is saved in the browser automatically after every change, so a refres
 
 Limits: baseplate 8 to 64, up to 2000 pieces. Size, height and stacking rules come from the piece catalog when a file loads, so renaming or removing a piece type in `legoPieces.js` breaks saves that use it.
 
-Saved camera angles are not part of the JSON file.
+Saved camera angles and home tour stops are not part of the JSON file.
 
 ## Animation and video export
 
@@ -123,7 +160,8 @@ The **Camera and video** section of the sidebar controls the animation.
   - **Finished:** the whole model is visible from the start.
 - **Camera:**
   - **Orbit:** one full turn around the model, starting from your current view.
-  - **My angles:** rotate and zoom to a view, press **+ Save current view**, and repeat for up to 8 angles. The camera flies smoothly through them in order.
+  - **Angles:** rotate and zoom to a view, press **+ Save current view**, and repeat for up to 8 angles. The camera flies smoothly through them in order.
+  - **Home tour:** first-person walkthrough. Choosing it turns on Walk. Walk to the start of the tour and press **+ Add stop here**, then walk to the next room and add another (up to 12 stops). The camera glides through the stops in order at a Fast (2 s), Normal (3 s) or Slow (5 s) pace per stop, with a wider lens suited to interiors. Go jumps back to a stop and × removes it.
 - **Preview** plays the animation on screen without saving.
 - **GIF** renders 480 px wide at 15 frames per second and loops forever.
 - **Video** records the canvas in real time and saves WebM, or MP4 where the browser supports it.
@@ -200,5 +238,6 @@ reg("key", "Name", w, d, h, canStackOn, (color) => {
 
 - Placement is grid-based, so pieces always snap to whole studs.
 - Stacking is simplified. Pieces rest on the highest piece under their footprint, and there is no real connection or collision check beyond that.
-- Saved camera angles are not stored in the JSON file.
+- Saved camera angles and home tour stops are not stored in the JSON file.
+- Walk mode has no collision, so you can walk through walls and furniture. Place your stops where you want the camera to be.
 - There is no multi-select or move tool. To reposition a piece, remove it and place it again.
