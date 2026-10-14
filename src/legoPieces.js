@@ -1399,13 +1399,729 @@ reg("gsteps", "Stepping stones", 2, 4, 0.25, true, () => {
   return g;
 });
 
+/* ---------- tiled roofs, round bricks, stairs, steps and ladders ---------- */
+// Overlapping rows of clay tiles on a slope. (z0, y0) is where the slope starts; dz = +1 if it rises toward +z.
+function tileRows(g, len, ang, L, c, z0, y0, dz) {
+  const n = Math.round(L / 0.55);
+  const step = L / n;
+  for (let i = 0; i < n; i++) {
+    const s = (i + 0.5) * step;
+    const y = y0 + s * Math.sin(ang) + 0.03 * Math.cos(ang);
+    const z = z0 + dz * s * Math.cos(ang) - dz * 0.03 * Math.sin(ang);
+    for (let j = -1; j * 0.5 < len; j++) {
+      const cx = 0.25 + j * 0.5 + (i % 2 ? 0.25 : 0); // every other row is shifted half a tile
+      const a = Math.max(0, cx - 0.25);
+      const b = Math.min(len, cx + 0.25);
+      if (b - a < 0.08) continue;
+      B(g, b - a - 0.03, 0.05, step * 1.15, mat(shade(c, [1, 0.93, 1.06][(i + j + 3) % 3])), (a + b) / 2, y, z).rotation.x = -dz * ang;
+    }
+  }
+}
+[2, 4].forEach((len) => {
+  reg(`rooftile${len}`, `Tiled roof ${len}×2`, len, 2, 1, false, (c) => {
+    const g = new THREE.Group();
+    add(g, roofGeo(len), mat(shade(c, 0.55)), len, 0, 0).rotation.y = -Math.PI / 2;
+    tileRows(g, len, Math.atan2(BH, 2), Math.hypot(2, BH), c, 0, 0, 1);
+    return g;
+  });
+  reg(`tilegable${len}`, `Tiled gable ${len}×4`, len, 4, 2, false, (c) => {
+    const g = new THREE.Group();
+    const H = 1.8;
+    const ang = Math.atan2(H, 2);
+    const L = Math.hypot(2, H);
+    add(g, prismGeo("g", [[0, 0], [4, 0], [2, H]], len), mat(shade(c, 0.55)), len, 0, 0).rotation.y = -Math.PI / 2;
+    tileRows(g, len, ang, L, c, 0, 0, 1);
+    tileRows(g, len, ang, L, c, 4, 0, -1);
+    Cyl(g, 0.13, 0.13, len, mat(shade(c, 0.8)), len / 2, H + 0.02, 2).rotation.z = Math.PI / 2; // ridge cap
+    return g;
+  });
+});
+
+// Round bricks: a cylinder with studs on top
+[1, 2, 3, 4].forEach((n) =>
+  reg(`round${n}`, `Round ${n}×${n}`, n, n, 1, true, (c) => {
+    const g = new THREE.Group();
+    const m = mat(c);
+    const r = n / 2 - 0.02;
+    add(g, G(THREE.CylinderGeometry, r, r, BH, 32), m, n / 2, BH / 2, n / 2);
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++)
+        if (Math.hypot(i + 0.5 - n / 2, j + 0.5 - n / 2) <= r - 0.1) add(g, studGeo, m, i + 0.5, BH + SH / 2, j + 0.5);
+    return g;
+  })
+);
+
+// Stairs: low end at the front (+z), climbing toward the back. Each step rises a quarter brick.
+const stairs = (steps, rail) => (c) => {
+  const g = new THREE.Group();
+  const m = mat(c);
+  const tread = mat(shade(c, 1.15));
+  const rise = BH * 0.25;
+  for (let i = 0; i < steps; i++) {
+    const h = (i + 1) * rise;
+    const z = steps - (i + 0.5);
+    B(g, 1.96, h, 0.96, m, 1, h / 2, z);
+    B(g, 1.96, 0.03, 1.0, tread, 1, h, z);
+  }
+  if (rail) {
+    for (let i = 0; i < steps; i += 2) {
+      const h = (i + 1) * rise;
+      B(g, 0.06, 0.85, 0.06, steel, 0.1, h + 0.425, steps - (i + 0.5));
+    }
+    tube(g, [0.1, rise + 0.9, steps - 0.5], [0.1, steps * rise + 0.9, 0.5], 0.03, steel);
+  }
+  return g;
+};
+reg("stairs4", "Stairs 2×4", 2, 4, 1, false, stairs(4, false));
+reg("stairs4r", "Stairs 2×4 with rail", 2, 4, 1, false, stairs(4, true));
+reg("stairs8", "Stairs 2×8", 2, 8, 2, false, stairs(8, false));
+
+// Single steps and a step stool
+reg("doorstep", "Doorstep", 2, 1, 0.25, true, (c) => {
+  const g = new THREE.Group();
+  B(g, 1.96, 0.3, 0.96, mat(c), 1, 0.15, 0.5);
+  [0.25, 0.45, 0.65, 0.85].forEach((z) => B(g, 1.8, 0.02, 0.05, mat(shade(c, 0.8)), 1, 0.31, z)); // anti-slip ribs
+  return g;
+});
+reg("step2", "Two-tier step", 2, 2, 0.5, false, (c) => {
+  const g = new THREE.Group();
+  const m = mat(c);
+  B(g, 1.96, 0.3, 0.96, m, 1, 0.15, 1.5);
+  B(g, 1.96, 0.6, 0.96, m, 1, 0.3, 0.5);
+  B(g, 1.96, 0.03, 1.0, mat(shade(c, 1.15)), 1, 0.3, 1.5);
+  B(g, 1.96, 0.03, 1.0, mat(shade(c, 1.15)), 1, 0.6, 0.5);
+  return g;
+});
+reg("stepstool", "Step stool", 1, 2, 1, false, (c) => {
+  const g = new THREE.Group();
+  const m = mat(c);
+  B(g, 0.9, 0.06, 0.6, m, 0.5, 1.15, 0.4); // top tread
+  B(g, 0.9, 0.06, 0.5, m, 0.5, 0.6, 1.45); // lower tread
+  [0.1, 0.9].forEach((x) => {
+    tube(g, [x, 0, 0.1], [x, 1.15, 0.2], 0.04, steel);
+    tube(g, [x, 0, 1.9], [x, 0.6, 1.6], 0.04, steel);
+    tube(g, [x, 0.6, 1.6], [x, 1.15, 0.5], 0.04, steel);
+  });
+  return g;
+});
+
+// Ladders
+const wallLadder = (H) => () => {
+  const g = new THREE.Group();
+  [0.15, 0.85].forEach((x) => tube(g, [x, 0, 0.2], [x, H, 0.2], 0.04, steel));
+  for (let y = 0.25; y < H - 0.1; y += 0.4) Cyl(g, 0.03, 0.03, 0.7, steel, 0.5, y, 0.2).rotation.z = Math.PI / 2; // rungs
+  [H * 0.2, H * 0.8].forEach((y) => [0.15, 0.85].forEach((x) => B(g, 0.05, 0.05, 0.18, steel, x, y, 0.1))); // wall brackets
+  return g;
+};
+reg("ladder2", "Ladder (2 tall)", 1, 1, 2, false, wallLadder(2.3));
+reg("ladder4", "Ladder (4 tall)", 1, 1, 4, false, wallLadder(4.7));
+reg("ladderlean", "Leaning ladder", 1, 2, 3, false, () => {
+  const g = new THREE.Group();
+  const wood = mat("#B07A45");
+  [0.2, 0.8].forEach((x) => {
+    tube(g, [x, 0, 1.8], [x, 3.4, 0.25], 0.05, wood);
+    B(g, 0.12, 0.05, 0.12, black, x, 0.025, 1.8);
+  });
+  for (let k = 1; k <= 9; k++) {
+    const t = k / 10;
+    Cyl(g, 0.035, 0.035, 0.6, wood, 0.5, 3.4 * t, 1.8 + (0.25 - 1.8) * t).rotation.z = Math.PI / 2;
+  }
+  return g;
+});
+
+/* ---------- roads, aircraft, pets, people, roof parts, steel, garden and towers ---------- */
+// Flat top-view shapes extruded upward, and shapes built from triangles
+const planGeos = {};
+function plan(g, pts, h, m, y = 0) {
+  const k = h + JSON.stringify(pts);
+  if (!planGeos[k]) {
+    const sh = new THREE.Shape();
+    pts.forEach(([x, z], i) => (i ? sh.lineTo(x, -z) : sh.moveTo(x, -z)));
+    planGeos[k] = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false });
+  }
+  const o = add(g, planGeos[k], m, 0, y, 0);
+  o.rotation.x = -Math.PI / 2;
+  return o;
+}
+const polyGeos = {};
+function polyGeo(key, tris) {
+  if (!polyGeos[key]) {
+    const pts = [];
+    tris.forEach((t) => t.forEach((p) => pts.push(V(...p))));
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    geo.computeVertexNormals();
+    polyGeos[key] = geo;
+  }
+  return polyGeos[key];
+}
+// Square-section bar between two points (steel tubes)
+function sq(g, a, b, t, m) {
+  const p = V(...a);
+  const q = V(...b);
+  const dir = q.clone().sub(p);
+  const o = add(g, G(THREE.BoxGeometry, 1, 1, 1), m, (p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2);
+  o.scale.set(t, dir.length(), t);
+  o.quaternion.setFromUnitVectors(V(0, 1, 0), dir.normalize());
+  return o;
+}
+
+/* ----- roads (quarter-brick thick; markings sit on top) ----- */
+const asphalt = mat("#3B3F45");
+const lineW = mat("#F4F4F4");
+const lineY = mat("#F2CD37");
+const mark = (g, w, d, m, x, z) => B(g, w, 0.02, d, m, x, 0.27, z);
+const dashZ = (g, x, z0, z1) => { for (let t = z0; t < z1 - 0.1; t += 1) mark(g, 0.12, 0.5, lineY, x, t + 0.5); };
+const dashX = (g, z, x0, x1) => { for (let t = x0; t < x1 - 0.1; t += 1) mark(g, 0.5, 0.12, lineY, t + 0.5, z); };
+const road = (d) => () => {
+  const g = new THREE.Group();
+  plate(g, 4, d, asphalt);
+  [0.2, 3.8].forEach((x) => mark(g, 0.1, d - 0.1, lineW, x, d / 2));
+  dashZ(g, 2, 0, d);
+  return g;
+};
+reg("road4", "Road 4×4", 4, 4, 0.25, true, road(4));
+reg("road8", "Road 4×8", 4, 8, 0.25, true, road(8));
+function arcLine(g, cx, cz, r, a0, a1, n, w, m, dashed) {
+  for (let i = 0; i < n; i++) {
+    if (dashed && i % 2) continue;
+    const a = a0 + ((i + 0.5) * (a1 - a0)) / n;
+    const len = Math.abs(((a1 - a0) / n) * r) * 1.08;
+    mark(g, len, w, m, cx + r * Math.cos(a), cz + r * Math.sin(a)).rotation.y = Math.atan2(-Math.cos(a), -Math.sin(a));
+  }
+}
+// Curve: enters at the front edge, leaves at the right edge
+reg("roadcurve", "Road curve", 4, 4, 0.25, true, () => {
+  const g = new THREE.Group();
+  B(g, 3.96, 0.2, 3.96, mat("#9A978F"), 2, 0.1, 2); // pavement in the corner
+  const pts = [[4, 4]];
+  for (let i = 0; i <= 16; i++) pts.push([4 + 4 * Math.cos(Math.PI + (i * Math.PI) / 32), 4 + 4 * Math.sin(Math.PI + (i * Math.PI) / 32)]);
+  plan(g, pts, 0.26, asphalt);
+  arcLine(g, 4, 4, 3.85, Math.PI, Math.PI * 1.5, 24, 0.1, lineW, false);
+  arcLine(g, 4, 4, 2, Math.PI, Math.PI * 1.5, 12, 0.12, lineY, true);
+  return g;
+});
+// Junctions: the main road runs left to right; the side road leaves from the front edge
+reg("roadt", "Road T-junction", 4, 4, 0.25, true, () => {
+  const g = new THREE.Group();
+  plate(g, 4, 4, asphalt);
+  mark(g, 3.8, 0.1, lineW, 2, 0.2);
+  dashX(g, 2, 0, 1);
+  dashX(g, 2, 3, 4);
+  dashZ(g, 2, 3, 4);
+  return g;
+});
+reg("roadx", "Road crossing", 4, 4, 0.25, true, () => {
+  const g = new THREE.Group();
+  plate(g, 4, 4, asphalt);
+  dashX(g, 2, 0, 1);
+  dashX(g, 2, 3, 4);
+  dashZ(g, 2, 0, 1);
+  dashZ(g, 2, 3, 4);
+  return g;
+});
+reg("zebra", "Zebra crossing", 4, 4, 0.25, true, () => {
+  const g = new THREE.Group();
+  plate(g, 4, 4, asphalt);
+  [0.2, 3.8].forEach((x) => mark(g, 0.1, 3.9, lineW, x, 2));
+  for (let k = 0; k < 6; k++) mark(g, 0.35, 2, lineW, 0.5 + k * 0.6, 2);
+  dashZ(g, 2, 0, 1);
+  dashZ(g, 2, 3, 4);
+  return g;
+});
+reg("pavement", "Pavement 2×4", 2, 4, 0.25, true, () => {
+  const g = new THREE.Group();
+  plate(g, 2, 4, mat("#B8B4AC"));
+  for (let z = 1; z < 4; z++) mark(g, 1.9, 0.04, mat("#8F8B84"), 1, z);
+  mark(g, 0.06, 3.9, mat("#8F8B84"), 1, 2);
+  return g;
+});
+
+/* ----- helicopter and fighter jet (nose toward +z) ----- */
+reg("heli", "Helicopter", 4, 6, 3, false, (c) => {
+  const g = new THREE.Group();
+  const body = mat(c);
+  Sph(g, 1, body, 2, 1.45, 3.7).scale.set(0.85, 0.8, 1.35); // cabin
+  Sph(g, 0.8, tintGlass, 2, 1.55, 4.45).scale.set(0.95, 0.8, 0.95); // canopy glass
+  tube(g, [2, 1.5, 2.6], [2, 1.95, 0.4], 0.17, body); // tail boom
+  B(g, 0.07, 0.9, 0.5, body, 2, 2.35, 0.3); // fin
+  B(g, 1.0, 0.06, 0.3, body, 2, 1.95, 0.35);
+  Cyl(g, 0.04, 0.04, 0.7, black, 2.12, 2.1, 0.2); // tail rotor
+  Cyl(g, 0.07, 0.07, 0.5, steel, 2, 2.6, 3.7); // mast
+  for (let k = 0; k < 3; k++) B(g, 3.8, 0.04, 0.2, black, 2, 2.9, 3.7).rotation.y = (k * Math.PI) / 3; // main rotor
+  [1.1, 2.9].forEach((x) => {
+    const lean = x < 2 ? 0.2 : -0.2;
+    tube(g, [x, 0.12, 2.6], [x, 0.12, 4.9], 0.05, steel); // skids
+    tube(g, [x, 0.12, 3.1], [x + lean, 0.9, 3.2], 0.04, steel);
+    tube(g, [x, 0.12, 4.4], [x + lean, 0.9, 4.3], 0.04, steel);
+  });
+  return g;
+});
+reg("jet", "Fighter jet", 6, 8, 2, false, (c) => {
+  const g = new THREE.Group();
+  const body = mat(c);
+  const wing = mat(shade(c, 0.8));
+  flat(Cyl(g, 0.5, 0.5, 5, body, 3, 1.0, 3.0)); // fuselage
+  flat(Cone(g, 0.5, 2.2, 16, body, 3, 1.0, 6.6)); // nose
+  flat(Cyl(g, 0.42, 0.5, 0.5, mat("#444444", { metalness: 0.6 }), 3, 1.0, 0.3)); // nozzle
+  flat(Cyl(g, 0.32, 0.32, 0.05, lit("#FF8A3D"), 3, 1.0, 0.06));
+  plan(g, [[3, 5.8], [5.95, 1.6], [5.95, 1.0], [3.55, 1.3], [2.45, 1.3], [0.05, 1.0], [0.05, 1.6]], 0.1, wing, 0.85); // wings
+  plan(g, [[3, 1.7], [4.7, 0.6], [4.7, 0.25], [3.4, 0.5], [2.6, 0.5], [1.3, 0.25], [1.3, 0.6]], 0.08, wing, 0.9); // tailplane
+  [2.55, 3.45].forEach((x, i) => (B(g, 0.07, 1.0, 0.9, body, x, 1.55, 0.9).rotation.z = i ? -0.25 : 0.25)); // twin fins
+  Sph(g, 0.45, tintGlass, 3, 1.4, 4.3).scale.set(0.8, 0.75, 2.0); // canopy
+  [2.45, 3.55].forEach((x) => B(g, 0.3, 0.4, 1.0, mat("#222222"), x, 0.85, 3.4)); // intakes
+  [[0.9, 2.0], [5.1, 2.0], [1.7, 2.4], [4.3, 2.4]].forEach(([x, z]) => {
+    flat(Cyl(g, 0.07, 0.07, 1.1, white, x, 0.72, z));
+    flat(Cone(g, 0.07, 0.25, 8, black, x, 0.72, z + 0.68));
+  });
+  return g;
+});
+
+/* ----- pets ----- */
+reg("dog", "Dog", 1, 2, 2, false, (c) => {
+  const g = new THREE.Group();
+  const coat = mat("#B98A55");
+  const dark = mat("#7A5230");
+  [[0.32, 0.5], [0.68, 0.5], [0.32, 1.1], [0.68, 1.1]].forEach(([x, z]) => B(g, 0.13, 0.5, 0.13, coat, x, 0.25, z));
+  B(g, 0.5, 0.5, 1.0, coat, 0.5, 0.75, 0.8);
+  B(g, 0.42, 0.4, 0.45, coat, 0.5, 1.2, 1.5);
+  B(g, 0.22, 0.18, 0.28, mat("#D9B382"), 0.5, 1.1, 1.78);
+  Sph(g, 0.05, black, 0.5, 1.16, 1.93);
+  [0.4, 0.6].forEach((x) => {
+    Sph(g, 0.04, black, x, 1.28, 1.72);
+    B(g, 0.1, 0.26, 0.12, dark, x + (x < 0.5 ? -0.17 : 0.17), 1.28, 1.45);
+  });
+  B(g, 0.54, 0.1, 0.3, mat(c), 0.5, 1.0, 1.3); // collar
+  tube(g, [0.5, 0.95, 0.3], [0.5, 1.4, 0.07], 0.04, coat);
+  return g;
+});
+reg("cat", "Cat", 1, 1, 1, false, () => {
+  const g = new THREE.Group();
+  const fr = mat("#8E8E93");
+  Sph(g, 0.3, fr, 0.5, 0.4, 0.45).scale.set(1, 1.25, 1);
+  Sph(g, 0.21, fr, 0.5, 0.95, 0.5);
+  [0.4, 0.6].forEach((x) => {
+    Cone(g, 0.07, 0.16, 4, fr, x, 1.17, 0.5);
+    Sph(g, 0.035, lit("#8CE08C"), x, 0.98, 0.69);
+    Sph(g, 0.08, fr, x, 0.1, 0.72); // front paws
+  });
+  Sph(g, 0.03, mat("#F4A9B8"), 0.5, 0.9, 0.71);
+  tube(g, [0.72, 0.1, 0.5], [0.9, 0.12, 0.7], 0.05, fr);
+  tube(g, [0.9, 0.12, 0.7], [0.85, 0.55, 0.85], 0.05, fr);
+  return g;
+});
+reg("rabbit", "Rabbit", 1, 1, 1, false, () => {
+  const g = new THREE.Group();
+  const fur = mat("#F1EEE8");
+  Sph(g, 0.3, fur, 0.5, 0.35, 0.5).scale.set(1, 0.9, 1.3);
+  Sph(g, 0.2, fur, 0.5, 0.62, 0.78);
+  [0.43, 0.57].forEach((x) => (Sph(g, 0.08, mat("#F4C7D0"), x, 1.0, 0.72).scale.set(0.7, 3.4, 0.5)));
+  [0.43, 0.57].forEach((x) => Sph(g, 0.03, black, x, 0.68, 0.95));
+  Sph(g, 0.11, white, 0.5, 0.38, 0.12);
+  [0.35, 0.65].forEach((x) => Sph(g, 0.09, fur, x, 0.08, 0.8));
+  return g;
+});
+reg("parrot", "Parrot on perch", 1, 1, 2, false, (c) => {
+  const g = new THREE.Group();
+  const wing = mat(shade(c, 0.7));
+  Cyl(g, 0.3, 0.3, 0.06, wood, 0.5, 0.03, 0.5);
+  Cyl(g, 0.03, 0.03, 1.35, wood, 0.5, 0.7, 0.5);
+  tube(g, [0.2, 1.4, 0.5], [0.8, 1.4, 0.5], 0.035, wood);
+  Sph(g, 0.2, mat(c), 0.5, 1.68, 0.5).scale.set(1, 1.5, 1);
+  Sph(g, 0.13, mat(c), 0.5, 2.0, 0.55);
+  Cone(g, 0.05, 0.13, 6, mat("#FE8A18"), 0.5, 1.98, 0.7).rotation.x = Math.PI / 2; // beak
+  [0.43, 0.57].forEach((x) => Sph(g, 0.02, black, x, 2.04, 0.64));
+  [0.3, 0.7].forEach((x) => B(g, 0.06, 0.4, 0.16, wing, x, 1.65, 0.5));
+  tube(g, [0.5, 1.45, 0.4], [0.5, 0.95, 0.25], 0.05, mat(shade(c, 1.2)));
+  return g;
+});
+reg("fishbowl", "Fish bowl", 1, 1, 1, false, () => {
+  const g = new THREE.Group();
+  const orange = mat("#FE8A18");
+  Cyl(g, 0.25, 0.3, 0.1, mat("#8A6A44"), 0.5, 0.05, 0.5);
+  Sph(g, 0.4, glass(), 0.5, 0.55, 0.5);
+  Sph(g, 0.34, waterMat, 0.5, 0.5, 0.5);
+  Sph(g, 0.09, orange, 0.45, 0.5, 0.5).scale.set(1.6, 1, 0.7);
+  Cone(g, 0.07, 0.16, 4, orange, 0.62, 0.5, 0.5).rotation.z = Math.PI / 2;
+  tube(g, [0.32, 0.2, 0.4], [0.36, 0.6, 0.42], 0.02, leafA);
+  [[0.6, 0.18], [0.45, 0.19], [0.68, 0.2]].forEach(([x, z]) => Sph(g, 0.04, mat("#8C8C8C"), x, 0.2, z + 0.3));
+  return g;
+});
+
+/* ----- more people (shirt, dress or apron takes your chosen color where noted) ----- */
+const figure = (sp) => (c) => {
+  const g = new THREE.Group();
+  const s = sp.scale || 1;
+  const f = new THREE.Group();
+  f.scale.setScalar(s);
+  f.position.set(0.5 - 0.5 * s, 0, 0.5 - 0.5 * s);
+  g.add(f);
+  const skin = mat("#F2CD37");
+  const top = mat(sp.top === "c" ? c : sp.top);
+  if (sp.dress) {
+    Cyl(f, 0.3, 0.46, 0.9, mat(c), 0.5, 0.65, 0.5);
+    [0.38, 0.62].forEach((x) => B(f, 0.14, 0.3, 0.14, skin, x, 0.15, 0.5));
+  } else {
+    [0.33, 0.67].forEach((x) => B(f, 0.34, 1, 0.46, mat(sp.bottom), x, 0.5, 0.5));
+  }
+  B(f, 0.64, 1.1, 0.46, top, 0.5, 1.55, 0.5);
+  [0.09, 0.91].forEach((x) => {
+    B(f, 0.18, 1, 0.28, top, x, 1.5, 0.5);
+    B(f, 0.18, 0.2, 0.26, skin, x, 0.9, 0.5);
+  });
+  Cyl(f, 0.3, 0.3, 0.5, skin, 0.5, 2.35, 0.5);
+  [0.4, 0.6].forEach((x) => Sph(f, 0.04, black, x, 2.4, 0.79));
+  B(f, 0.2, 0.04, 0.02, black, 0.5, 2.25, 0.8);
+  if (sp.hair) {
+    const hm = mat(sp.hair.color);
+    Cyl(f, 0.32, 0.32, 0.16, hm, 0.5, 2.58, 0.5);
+    B(f, 0.6, 0.45, 0.1, hm, 0.5, 2.4, 0.24);
+    if (sp.hair.style === "long") {
+      B(f, 0.62, 0.95, 0.14, hm, 0.5, 2.05, 0.26);
+      [0.2, 0.8].forEach((x) => B(f, 0.1, 0.5, 0.3, hm, x, 2.3, 0.42));
+    }
+    if (sp.hair.style === "pigtails") [0.14, 0.86].forEach((x) => Sph(f, 0.14, hm, x, 2.4, 0.45));
+  }
+  if (sp.hat === "chef") {
+    Cyl(f, 0.28, 0.28, 0.45, white, 0.5, 2.82, 0.5);
+    Sph(f, 0.3, white, 0.5, 3.1, 0.5);
+  }
+  if (sp.hat === "police") {
+    Cyl(f, 0.33, 0.33, 0.14, mat("#1E2A44"), 0.5, 2.67, 0.5);
+    B(f, 0.46, 0.04, 0.22, black, 0.5, 2.62, 0.82);
+  }
+  if (sp.hat === "straw") {
+    Cyl(f, 0.6, 0.6, 0.04, mat("#E3C27A"), 0.5, 2.66, 0.5);
+    Cyl(f, 0.3, 0.3, 0.22, mat("#E3C27A"), 0.5, 2.78, 0.5);
+  }
+  if (sp.extra) sp.extra(f, c);
+  return g;
+};
+reg("woman", "Woman", 1, 1, 3, false, figure({ top: "c", dress: true, hair: { color: "#3A2412", style: "long" } }));
+reg("man", "Man in suit", 1, 1, 3, false, figure({
+  top: "#2B3544", bottom: "#2B3544", hair: { color: "#2A1B10", style: "short" },
+  extra: (f, c) => {
+    B(f, 0.2, 0.5, 0.02, white, 0.5, 1.7, 0.745);
+    B(f, 0.1, 0.55, 0.03, mat(c), 0.5, 1.62, 0.76); // tie
+  },
+}));
+reg("child", "Child", 1, 1, 2, false, figure({ scale: 0.72, top: "c", bottom: "#2F4B7C", hair: { color: "#C9822B", style: "pigtails" } }));
+reg("chef", "Chef", 1, 1, 3, false, figure({
+  top: "#F4F4F4", bottom: "#555C66", hat: "chef",
+  extra: (f, c) => B(f, 0.6, 0.95, 0.03, mat(c), 0.5, 1.2, 0.745), // apron
+}));
+reg("doctor", "Doctor", 1, 1, 3, false, figure({
+  top: "#F4F4F4", bottom: "#2E8B8B", hair: { color: "#2A1B10", style: "short" },
+  extra: (f) => {
+    B(f, 0.68, 0.55, 0.5, white, 0.5, 0.95, 0.5); // long coat
+    add(f, G(THREE.TorusGeometry, 0.16, 0.015, 6, 16), black, 0.5, 1.95, 0.745); // stethoscope
+  },
+}));
+reg("police", "Police officer", 1, 1, 3, false, figure({
+  top: "#1E2A44", bottom: "#1E2A44", hat: "police",
+  extra: (f) => {
+    B(f, 0.1, 0.12, 0.02, brass, 0.68, 1.9, 0.745);
+    B(f, 0.66, 0.1, 0.48, black, 0.5, 1.05, 0.5);
+  },
+}));
+reg("farmer", "Farmer", 1, 1, 3, false, figure({
+  top: "c", bottom: "#2F5D9E", hat: "straw",
+  extra: (f) => B(f, 0.5, 0.6, 0.03, mat("#2F5D9E"), 0.5, 1.4, 0.745), // overall bib
+}));
+
+/* ----- corner roofs, barrel tiles and a metal roof sheet ----- */
+const cornerRoof = (n, outer) => (c) => {
+  const g = new THREE.Group();
+  const H = (BH * n) / 2;
+  const A = [0, 0, 0], Bp = [n, 0, 0], C = [n, 0, n], D = [0, 0, n];
+  const Bt = [n, H, 0], Ct = [n, H, n], Dt = [0, H, n];
+  // outer: two slopes meeting at a hip; inner: two slopes meeting in a valley
+  const tris = outer
+    ? [[A, Bp, Ct], [A, Ct, D], [Bp, C, Ct], [D, Ct, C], [A, Bp, C], [A, C, D]]
+    : [[A, Bt, Ct], [A, Ct, Dt], [Bp, C, Ct], [Bp, Ct, Bt], [D, C, Ct], [D, Ct, Dt], [A, Bp, Bt], [A, D, Dt], [A, Bp, C], [A, C, D]];
+  add(g, polyGeo(`corner${outer ? "o" : "i"}${n}`, tris), mat(shade(c, 0.9), { side: THREE.DoubleSide }), 0, 0, 0);
+  return g;
+};
+[2, 4].forEach((n) => {
+  reg(`roofcornerout${n}`, `Roof corner outer ${n}×${n}`, n, n, n === 2 ? 1 : 2, false, cornerRoof(n, true));
+  reg(`roofcornerin${n}`, `Roof corner inner ${n}×${n}`, n, n, n === 2 ? 1 : 2, false, cornerRoof(n, false));
+});
+[2, 4].forEach((len) =>
+  reg(`barrel${len}`, `Barrel-tile roof ${len}×2`, len, 2, 1, false, (c) => {
+    const g = new THREE.Group();
+    add(g, roofGeo(len), mat(shade(c, 0.55)), len, 0, 0).rotation.y = -Math.PI / 2;
+    const L = Math.hypot(2, BH);
+    const cs = 2 / L;
+    const sn = BH / L;
+    for (let j = 0; j < len * 2; j++) {
+      const x = 0.25 + j * 0.5;
+      const q = (t) => [x, BH * t + 0.12 * cs, 2 * t - 0.12 * sn]; // a point on the slope, lifted off it a little
+      tube(g, q(0.07), q(0.93), 0.15, mat(shade(c, [1, 0.92, 1.06][j % 3])));
+    }
+    return g;
+  })
+);
+reg("metalroof4", "Metal roof sheet 4×2", 4, 2, 1, false, () => {
+  const g = new THREE.Group();
+  add(g, roofGeo(4), mat("#7D8791", { metalness: 0.6, roughness: 0.4 }), 4, 0, 0).rotation.y = -Math.PI / 2;
+  const L = Math.hypot(2, BH);
+  for (let k = 0; k < 10; k++) {
+    B(g, 0.12, 0.07, L, mat(k % 2 ? "#AEB6BF" : "#9AA3AD", { metalness: 0.6, roughness: 0.35 }), 0.2 + k * 0.4, BH / 2 + 0.04 * (2 / L), 1 - 0.04 * (BH / L)).rotation.x = -Math.atan2(BH, 2);
+  }
+  return g;
+});
+
+/* ----- roof logs, steel beams and trusses ----- */
+[4, 8].forEach((len) =>
+  reg(`logbeam${len}`, `Log beam 1×${len}`, 1, len, 0.75, true, () => {
+    const g = new THREE.Group();
+    logZ(g, 0.4, len - 0.1, 0.5, 0.4, 0.05);
+    return g;
+  })
+);
+const logTruss = (len, H) => () => {
+  const g = new THREE.Group();
+  tube(g, [0.1, 0.3, 0.5], [len / 2, H, 0.5], 0.09, barkMat); // rafters
+  tube(g, [len - 0.1, 0.3, 0.5], [len / 2, H, 0.5], 0.09, barkMat);
+  tube(g, [0.1, 0.3, 0.5], [len - 0.1, 0.3, 0.5], 0.09, barkMat); // tie beam
+  tube(g, [len / 2, 0.3, 0.5], [len / 2, H, 0.5], 0.08, barkMat); // king post
+  tube(g, [len / 2, 0.4, 0.5], [len * 0.25, H * 0.5, 0.5], 0.06, barkMat); // struts
+  tube(g, [len / 2, 0.4, 0.5], [len * 0.75, H * 0.5, 0.5], 0.06, barkMat);
+  return g;
+};
+reg("logtruss4", "Log roof truss 4×1", 4, 1, 2, false, logTruss(4, 1.7));
+reg("logtruss6", "Log roof truss 6×1", 6, 1, 2, false, logTruss(6, 2.2));
+const steelSq = mat("#8A929B", { metalness: 0.7, roughness: 0.4 });
+[4, 8, 12].forEach((len) =>
+  reg(`steel${len}`, `Steel beam 1×${len}`, 1, len, 0.5, true, () => {
+    const g = new THREE.Group();
+    B(g, 0.6, 0.6, len - 0.04, steelSq, 0.5, 0.3, len / 2); // square-section bar
+    [0.01, len - 0.01].forEach((z) => B(g, 0.38, 0.38, 0.02, black, 0.5, 0.3, z)); // hollow ends
+    return g;
+  })
+);
+reg("steelpost", "Steel post", 1, 1, 3, true, () => {
+  const g = new THREE.Group();
+  B(g, 0.5, 3.5, 0.5, steelSq, 0.5, 1.75, 0.5);
+  B(g, 0.9, 0.05, 0.9, steelSq, 0.5, 0.025, 0.5);
+  return g;
+});
+reg("steeltruss", "Steel roof truss 6×1", 6, 1, 2, false, () => {
+  const g = new THREE.Group();
+  const t = 0.1;
+  sq(g, [0.1, 0.4, 0.5], [5.9, 0.4, 0.5], t, steelSq);
+  sq(g, [0.1, 0.4, 0.5], [3, 2.0, 0.5], t, steelSq);
+  sq(g, [5.9, 0.4, 0.5], [3, 2.0, 0.5], t, steelSq);
+  [1.5, 3, 4.5].forEach((x) => sq(g, [x, 0.4, 0.5], [x, x === 3 ? 2.0 : 0.4 + 1.6 * (x < 3 ? x / 3 : (6 - x) / 3), 0.5], 0.07, steelSq));
+  sq(g, [1.5, 0.4, 0.5], [3, 2.0, 0.5], 0.07, steelSq);
+  sq(g, [4.5, 0.4, 0.5], [3, 2.0, 0.5], 0.07, steelSq);
+  return g;
+});
+
+/* ----- garden things ----- */
+const soil = mat("#4A3222");
+reg("raisedbed", "Raised garden bed", 2, 4, 1, false, () => {
+  const g = new THREE.Group();
+  [0.05, 3.95].forEach((z) => B(g, 1.96, 0.8, 0.1, wood, 1, 0.4, z));
+  [0.05, 1.95].forEach((x) => B(g, 0.1, 0.8, 3.9, wood, x, 0.4, 2));
+  B(g, 1.8, 0.05, 3.8, soil, 1, 0.7, 2);
+  for (let k = 0; k < 6; k++) {
+    Sph(g, 0.24, k % 2 ? leafA : leafB, 0.55, 0.92, 0.4 + k * 0.6);
+    Sph(g, 0.2, mat(k % 3 ? "#D01012" : "#FE8A18"), 1.45, 0.9, 0.7 + k * 0.5);
+  }
+  return g;
+});
+reg("wheelbarrow", "Wheelbarrow", 2, 3, 1, false, (c) => {
+  const g = new THREE.Group();
+  B(g, 1.3, 0.5, 1.3, mat(c), 1, 0.85, 1.5);
+  B(g, 1.1, 0.04, 1.1, soil, 1, 1.1, 1.5);
+  wheel(g, 1, 0.35, 2.7, 0.35, 0.15);
+  [0.4, 1.6].forEach((x) => {
+    tube(g, [x, 0.8, 0.95], [x, 0.9, 0.1], 0.05, wood); // handles
+    tube(g, [x, 0.75, 0.6], [x, 0, 0.35], 0.04, steel); // legs
+  });
+  return g;
+});
+reg("wateringcan", "Watering can", 1, 1, 1, false, (c) => {
+  const g = new THREE.Group();
+  Cyl(g, 0.3, 0.3, 0.5, mat(c, { metalness: 0.3 }), 0.4, 0.3, 0.5);
+  tube(g, [0.62, 0.35, 0.5], [0.92, 0.75, 0.5], 0.04, steel);
+  Cyl(g, 0.1, 0.05, 0.1, steel, 0.95, 0.8, 0.5).rotation.z = -0.8; // rose
+  add(g, G(THREE.TorusGeometry, 0.22, 0.025, 6, 12, Math.PI), steel, 0.4, 0.55, 0.5);
+  return g;
+});
+reg("shed", "Garden shed", 4, 4, 3, false, (c) => {
+  const g = new THREE.Group();
+  B(g, 3.8, 2.2, 3.6, mat(c), 2, 1.1, 2);
+  add(g, prismGeo("g", [[0, 0], [4, 0], [2, 1.2]], 4), mat(shade(c, 0.5)), 4, 2.2, 0).rotation.y = -Math.PI / 2; // roof
+  B(g, 0.9, 1.7, 0.06, wood, 1.2, 0.85, 3.83); // door
+  Sph(g, 0.05, brass, 1.5, 0.85, 3.88);
+  B(g, 0.9, 0.8, 0.04, glass(), 3.0, 1.4, 3.83); // window
+  B(g, 1.0, 0.9, 0.05, white, 3.0, 1.4, 3.81);
+  return g;
+});
+reg("greenhouse", "Greenhouse", 6, 4, 3, false, () => {
+  const g = new THREE.Group();
+  const fr = white;
+  B(g, 5.9, 0.3, 3.9, fr, 3, 0.15, 2);
+  [0.05, 3.95].forEach((z) => B(g, 5.9, 1.6, 0.04, glass(), 3, 1.1, z));
+  [0.05, 5.95].forEach((x) => B(g, 0.04, 1.6, 3.9, glass(), x, 1.1, 2));
+  [0.05, 2, 4, 5.95].forEach((x) => [0.05, 3.95].forEach((z) => B(g, 0.08, 1.7, 0.08, fr, x, 1.15, z)));
+  const ang = Math.atan2(0.8, 2);
+  const L = Math.hypot(2, 0.8);
+  slope(g, 5.9, L, glass(), 3, 2.3, 1, -ang);
+  slope(g, 5.9, L, glass(), 3, 2.3, 3, ang);
+  B(g, 6, 0.08, 0.08, fr, 3, 2.7, 2);
+  [0.03, 6].forEach((x) => (add(g, prismGeo("gh", [[0, 0], [4, 0], [2, 0.8]], 0.03), glass(), x, 1.9, 0).rotation.y = -Math.PI / 2));
+  B(g, 5, 0.06, 0.6, wood, 3, 0.9, 0.5); // potting bench with plants
+  for (let k = 0; k < 5; k++) Sph(g, 0.18, k % 2 ? leafA : leafB, 1 + k, 1.15, 0.5);
+  return g;
+});
+reg("pergola", "Pergola", 4, 4, 3, false, () => {
+  const g = new THREE.Group();
+  [0.2, 3.8].forEach((x) => [0.2, 3.8].forEach((z) => {
+    B(g, 0.25, 3.2, 0.25, wood, x, 1.6, z);
+    Sph(g, 0.2, leafA, x, 1.4, z);
+  }));
+  [0.2, 3.8].forEach((z) => B(g, 3.9, 0.2, 0.2, wood, 2, 3.1, z));
+  for (let k = 0; k < 8; k++) B(g, 0.12, 0.12, 3.9, wood, 0.3 + k * 0.5, 3.3, 2);
+  return g;
+});
+reg("arch", "Garden arch", 2, 1, 3, false, (c) => {
+  const g = new THREE.Group();
+  [0.15, 1.85].forEach((x) => B(g, 0.1, 2.2, 0.1, wood, x, 1.1, 0.5));
+  add(g, G(THREE.TorusGeometry, 0.85, 0.05, 8, 20, Math.PI), wood, 1, 2.2, 0.5);
+  for (let a = 0; a <= Math.PI + 0.01; a += 0.4) Sph(g, 0.1, (a / 0.4) % 2 ? leafA : mat(c), 1 + 0.85 * Math.cos(a), 2.2 + 0.85 * Math.sin(a), 0.5);
+  return g;
+});
+reg("birdbath", "Bird bath", 1, 1, 2, false, () => {
+  const g = new THREE.Group();
+  const st = mat("#B9B3A8");
+  Cyl(g, 0.28, 0.32, 0.12, st, 0.5, 0.06, 0.5);
+  Cyl(g, 0.12, 0.18, 1.1, st, 0.5, 0.65, 0.5);
+  Cyl(g, 0.45, 0.2, 0.22, st, 0.5, 1.3, 0.5);
+  Cyl(g, 0.38, 0.38, 0.03, waterMat, 0.5, 1.4, 0.5);
+  return g;
+});
+reg("scarecrow", "Scarecrow", 1, 1, 3, false, (c) => {
+  const g = new THREE.Group();
+  const straw = mat("#E3C27A");
+  B(g, 0.08, 2.6, 0.08, wood, 0.5, 1.3, 0.5);
+  B(g, 0.9, 0.08, 0.08, wood, 0.5, 1.9, 0.5);
+  B(g, 0.5, 0.8, 0.2, mat(c), 0.5, 1.6, 0.5);
+  Sph(g, 0.22, straw, 0.5, 2.35, 0.5);
+  Cyl(g, 0.4, 0.4, 0.04, mat("#5A3A1E"), 0.5, 2.5, 0.5);
+  Cyl(g, 0.2, 0.2, 0.2, mat("#5A3A1E"), 0.5, 2.62, 0.5);
+  [0.1, 0.9].forEach((x) => Cone(g, 0.05, 0.2, 5, straw, x, 1.8, 0.5).rotation.z = x < 0.5 ? Math.PI / 2 : -Math.PI / 2);
+  return g;
+});
+reg("well", "Stone well", 2, 2, 3, false, (c) => {
+  const g = new THREE.Group();
+  const st = mat("#9A9690");
+  if (!planGeos.well) {
+    const sh = new THREE.Shape();
+    sh.absarc(0, 0, 0.92, 0, Math.PI * 2, false);
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, 0.62, 0, Math.PI * 2, true);
+    sh.holes.push(hole);
+    planGeos.well = new THREE.ExtrudeGeometry(sh, { depth: 1.0, bevelEnabled: false, curveSegments: 32 });
+  }
+  add(g, planGeos.well, st, 1, 0, 1).rotation.x = -Math.PI / 2; // hollow ring wall
+  Cyl(g, 0.6, 0.6, 0.04, waterMat, 1, 0.5, 1);
+  [0.12, 1.88].forEach((x) => B(g, 0.12, 1.9, 0.12, wood, x, 1.95, 1)); // posts
+  tube(g, [0.1, 2.6, 1], [1.9, 2.6, 1], 0.05, wood); // windlass bar
+  B(g, 1.15, 0.06, 1.6, mat(c), 0.55, 3.0, 1).rotation.z = 0.45; // little roof
+  B(g, 1.15, 0.06, 1.6, mat(c), 1.45, 3.0, 1).rotation.z = -0.45;
+  tube(g, [1, 2.6, 1], [1, 2.0, 1], 0.012, steel);
+  Cyl(g, 0.15, 0.12, 0.25, wood, 1, 1.85, 1); // bucket
+  return g;
+});
+
+/* ----- tower and castle parts (round towers stack: shaft, battlements, roof) ----- */
+const castleStone = mat("#9A9690");
+const castleDark = mat("#7E7A74");
+const towerShaft = (n, h) => () => {
+  const g = new THREE.Group();
+  const r = n / 2 - 0.05;
+  Cyl(g, r, r + 0.05, h, castleStone, n / 2, h / 2, n / 2);
+  [0.25, 0.5, 0.75].forEach((t) => Cyl(g, r + 0.03, r + 0.03, 0.04, castleDark, n / 2, h * t, n / 2));
+  B(g, 0.1, 0.5, 0.08, black, n / 2, h * 0.55, n / 2 + r); // arrow slit
+  return g;
+};
+reg("towerround2", "Round tower 2×2", 2, 2, 2, true, towerShaft(2, 2.4));
+reg("towerround4", "Round tower 4×4", 4, 4, 3, true, towerShaft(4, 3.6));
+[2, 4].forEach((n) =>
+  reg(`towertop${n}`, `Tower battlements ${n}×${n}`, n, n, 1, false, () => {
+    const g = new THREE.Group();
+    const r = n / 2 - 0.05;
+    Cyl(g, r + 0.02, r + 0.02, 0.3, castleStone, n / 2, 0.15, n / 2);
+    const count = n === 2 ? 8 : 14;
+    for (let k = 0; k < count; k++) {
+      const a = (k / count) * Math.PI * 2;
+      B(g, ((2 * Math.PI * r) / count) * 0.55, 0.4, 0.28, castleStone, n / 2 + (r - 0.1) * Math.cos(a), 0.5, n / 2 + (r - 0.1) * Math.sin(a)).rotation.y = -(a + Math.PI / 2);
+    }
+    return g;
+  })
+);
+reg("towerroof2", "Tower roof 2×2", 2, 2, 2, false, (c) => {
+  const g = new THREE.Group();
+  Cone(g, 1.05, 2.2, 24, mat(c), 1, 1.1, 1);
+  Sph(g, 0.07, brass, 1, 2.25, 1);
+  return g;
+});
+reg("towerroof4", "Tower roof 4×4", 4, 4, 3, false, (c) => {
+  const g = new THREE.Group();
+  Cone(g, 2.05, 3.4, 32, mat(c), 2, 1.7, 2);
+  Sph(g, 0.1, brass, 2, 3.45, 2);
+  return g;
+});
+reg("castlewall", "Castle wall 4×1", 4, 1, 2, false, () => {
+  const g = new THREE.Group();
+  B(g, 3.96, 1.8, 0.8, castleStone, 2, 0.9, 0.5);
+  [0.6, 1.2].forEach((y) => B(g, 3.96, 0.03, 0.82, castleDark, 2, y, 0.5));
+  for (let k = 0; k < 5; k++) B(g, 0.5, 0.4, 0.8, castleStone, 0.3 + k * 0.85, 2.0, 0.5);
+  return g;
+});
+const gateGeo = () => {
+  if (!planGeos.gate) {
+    const sh = new THREE.Shape();
+    sh.moveTo(0.02, 0);
+    sh.lineTo(1.1, 0);
+    sh.lineTo(1.1, 1.5);
+    sh.absarc(2, 1.5, 0.9, Math.PI, 0, true);
+    sh.lineTo(2.9, 0);
+    sh.lineTo(3.98, 0);
+    sh.lineTo(3.98, 3.2);
+    sh.lineTo(0.02, 3.2);
+    sh.lineTo(0.02, 0);
+    planGeos.gate = new THREE.ExtrudeGeometry(sh, { depth: 0.8, bevelEnabled: false, curveSegments: 16 });
+  }
+  return planGeos.gate;
+};
+reg("castlegate", "Castle gate 4×1", 4, 1, 3, false, () => {
+  const g = new THREE.Group();
+  add(g, gateGeo(), castleStone, 0, 0, 0.1);
+  for (let k = 0; k < 5; k++) B(g, 0.5, 0.4, 0.8, castleStone, 0.3 + k * 0.85, 3.4, 0.5);
+  for (let x = 1.35; x < 2.7; x += 0.25) B(g, 0.05, 1.7, 0.05, ironM, x, 1.0, 0.5); // portcullis
+  [0.9, 1.7].forEach((y) => B(g, 1.6, 0.05, 0.05, ironM, 2, y, 0.5));
+  return g;
+});
+reg("flag", "Flag", 1, 1, 3, false, (c) => {
+  const g = new THREE.Group();
+  Cyl(g, 0.03, 0.03, 2.8, steel, 0.5, 1.4, 0.5);
+  Sph(g, 0.06, brass, 0.5, 2.85, 0.5);
+  B(g, 0.4, 0.45, 0.03, mat(c), 0.7, 2.5, 0.5);
+  return g;
+});
+
 /* How the picker groups pieces */
 export const GROUPS = [
   { title: "Bricks", keys: ["b1x1", "b1x2", "b1x3", "b1x4", "b2x2", "b2x3", "b2x4"] },
   { title: "Flat bricks (smooth top)", keys: ["f1x1", "f1x2", "f1x3", "f1x4", "f2x2", "f2x3", "f2x4"] },
   { title: "Flat tiles (thin)", keys: ["t1x2", "t2x2", "t2x4", "t4x4", "t4x8"] },
+  { title: "Round bricks", keys: ["round1", "round2", "round3", "round4"] },
   { title: "Building parts", keys: ["window", "windowopen", "door", "dooropen"] },
-  { title: "Roofs", keys: ["roof2", "roof4", "gable2", "gable4", "hip2", "hip4", "spire", "dome", "glassroof2", "glassroof4", "glassgable2", "glassgable4", "glassflat2", "glassflat4"] },
+  { title: "Stairs and ladders", keys: ["stairs4", "stairs4r", "stairs8", "doorstep", "step2", "stepstool", "ladder2", "ladder4", "ladderlean"] },
+  { title: "Roofs", keys: ["roof2", "roof4", "gable2", "gable4", "hip2", "hip4", "spire", "dome", "rooftile2", "rooftile4", "tilegable2", "tilegable4", "glassroof2", "glassroof4", "glassgable2", "glassgable4", "glassflat2", "glassflat4", "roofcornerout2", "roofcornerout4", "roofcornerin2", "roofcornerin4", "barrel2", "barrel4", "metalroof4"] },
   { title: "Wooden logs", keys: ["log2", "log4", "logpile", "firewood", "stump"] },
   { title: "Trees", keys: ["pine", "oak", "palm"] },
   { title: "Plants and stones", keys: ["pot", "bush", "flowers", "sunflower", "cactus", "grass", "hedge", "stone", "boulder"] },
@@ -1414,8 +2130,14 @@ export const GROUPS = [
   { title: "Roof rails", keys: ["roofrail2", "roofrail4", "railcorner", "glassrail"] },
   { title: "Floor tiles", keys: ["floorc2", "floorc4", "floorw2", "floorw4", "floort2", "floort4"] },
   { title: "Garden tiles", keys: ["lawn2", "lawn4", "gpath", "gsteps", "paver2", "paver4", "cobble2", "cobble4"] },
-  { title: "People", keys: ["person", "worker"] },
+  { title: "Garden things", keys: ["raisedbed", "wheelbarrow", "wateringcan", "shed", "greenhouse", "pergola", "arch", "birdbath", "scarecrow", "well"] },
+  { title: "Roof logs and steel", keys: ["logbeam4", "logbeam8", "logtruss4", "logtruss6", "steel4", "steel8", "steel12", "steelpost", "steeltruss"] },
+  { title: "Towers and castle", keys: ["towerround2", "towerround4", "towertop2", "towertop4", "towerroof2", "towerroof4", "castlewall", "castlegate", "flag"] },
+  { title: "People", keys: ["person", "worker", "woman", "man", "child", "chef", "doctor", "police", "farmer"] },
+  { title: "Pets", keys: ["dog", "cat", "rabbit", "parrot", "fishbowl"] },
   { title: "Road vehicles", keys: ["car", "bus"] },
+  { title: "Air vehicles", keys: ["heli", "jet"] },
+  { title: "Roads", keys: ["road4", "road8", "roadcurve", "roadt", "roadx", "zebra", "pavement"] },
   { title: "Two-wheelers", keys: ["bicycle", "kick", "scooter", "motorbike"] },
   { title: "Railway", keys: ["track2", "track4", "curve", "loco", "coach", "wagon"] },
   { title: "Water and boats", keys: ["pond", "river", "lake", "sea", "pool6", "pool8", "motorboat", "sailboat", "ship"] },
